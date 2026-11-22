@@ -1,8 +1,6 @@
 import * as THREE from '../../vendor/three.min.js';
-
 import { CONFIG } from './config.js';
 
-// World state
 export const world = {
   state: 'title',
   buildings: [],
@@ -26,196 +24,193 @@ export const world = {
   saveData: null,
 };
 
-// Color palettes
-export const PALETTE = {
-  // City colors 
-  buildingColors: [
-    0x1a1a2e, 0x16213e, 0x0f3460, 0x1a1a2e, 0x533483,
-    0x164216, 0x2d1b1b, 0x1a1a1a, 0x3d5a80, 0x1f1f1f,
-  ],
-  // Road colors
-  roadColors: [
-    0x444444, 0x555555, 0x666666, 0x333333,
-  ],
-  // Tree colors
-  treeColors: [
-    0x1a5276, 0x2e86c1, 0x34495e, 0x1b4f72, 0x2471a3,
-  ],
+// Player data
+export const player = {
+  money: 0,
+  reputation: 100,
+  carsOwned: [],
+  finishLine: null,
+  lastCheckpoint: 0,
+  storyProgress: 0,
 };
 
-// Create the world
-export function createWorld(random) {
+// Create a proper 3D city with roads
+export function createCity() {
   const size = CONFIG.WORLD_SIZE;
   
-  // Create ground
-  const geometry = new THREE.PlaneGeometry(size, size);
-  geometry.rotateX(-Math.PI / 2);
-  const material = new THREE.MeshStandardMaterial({
-    color: 0x1a1a2e,
-    roughness: 0.8,
-    metalness: 0.2,
+  // Ground
+  const groundGeo = new THREE.PlaneGeometry(size * 2, size * 2);
+  groundGeo.rotateX(-Math.PI / 2);
+  const groundMat = new THREE.MeshStandardMaterial({
+    color: 0x1a1a2e, roughness: 0.8, metalness: 0.2,
   });
-  const ground = new THREE.Mesh(geometry, material);
+  const ground = new THREE.Mesh(groundGeo, groundMat);
   ground.receiveShadow = true;
   world.ground = ground;
   
-  // Generate roads (main roads)
-  const roads = [];
-  const roadPadding = 40;
-  const mainRoadSize = 300;
-  const subRoadSize = 150;
-  
-  // Main roads (horizontal and vertical)
-  const mainRoadPoints = [];
-  const subRoadPoints = [];
-  
-  // Horizontal main roads
-  for (let y = -mainRoadSize / 2; y <= mainRoadSize / 2; y += mainRoadSize / 2) {
-    mainRoadPoints.push({ x: -mainRoadSize / 2, y, z: 0 });
-    mainRoadPoints.push({ x: mainRoadSize / 2, y, z: 0 });
-  }
-  
-  // Vertical main roads
-  for (let x = -mainRoadSize / 2; x <= mainRoadSize / 2; x += mainRoadSize / 2) {
-    mainRoadPoints.push({ x, y: -mainRoadSize / 2, z: 0 });
-    mainRoadPoints.push({ x, y: mainRoadSize / 2, z: 0 });
-  }
-  
-  // Sub roads
-  for (let y = -subRoadSize / 2; y <= subRoadSize / 2; y += subRoadSize / 2) {
-    subRoadPoints.push({ x: -subRoadSize / 2, y, z: 0 });
-    subRoadPoints.push({ x: subRoadSize / 2, y, z: 0 });
-  }
-  
-  for (let x = -subRoadSize / 2; x <= subRoadSize / 2; x += subRoadSize / 2) {
-    subRoadPoints.push({ x, y: -subRoadSize / 2, z: 0 });
-    subRoadPoints.push({ x, y: subRoadSize / 2, z: 0 });
-  }
-  
-  roads.push(...mainRoadPoints, ...subRoadPoints);
-  
-  // Create road meshes
-  const roadGeometry = new THREE.BoxGeometry(CONFIG.ROAD_WIDTH, 0.5, 4);
-  const roadMaterial = new THREE.MeshStandardMaterial({
-    color: 0x444444,
-    roughness: 0.9,
-    metalness: 0.1,
+  // Road grid
+  const roadMat = new THREE.MeshStandardMaterial({
+    color: 0x444444, roughness: 0.9, metalness: 0.1,
   });
   
-  // Create road grid
-  const roadSections = [];
-  const roadGridY = [];
-  const roadGridZ = [];
-  const roadDist = 30;
-  const roadCount = 15;
+  // Main roads (thick)
+  const mainRoadWidth = 12;
+  const subRoadWidth = 8;
+  const roadSegment = 25;
+  const roadCount = 20;
   
+  // Horizontal main roads
   for (let i = 0; i < roadCount; i++) {
-    const y = (i - roadCount / 2) * roadDist;
-    for (let j = 0; j < roadCount; j++) {
-      const z = (j - roadCount / 2) * roadDist;
-      const mesh = new THREE.Mesh(
-        new THREE.BoxGeometry(CONFIG.ROAD_WIDTH, 0.5, roadDist),
-        roadMaterial
-      );
-      mesh.position.set(z, 0.25, y);
-      mesh.receiveShadow = true;
-      world.buildings.push(mesh);
-      roadSections.push(mesh);
-    }
-  }
-  
-  // Generate buildings
-  const buildingGeometry = new THREE.BoxGeometry(6, 8, 6);
-  const baseColors = [0x2d1b1b, 0x1a1a2e, 0x16213e, 0x3d5a80, 0x1a1a1a, 0x5a3a2d];
-  const colors = [];
-  
-  for (let i = 0; i < 150; i++) {
-    const x = randomRange(-200, 200, random);
-    const z = randomRange(-200, 200, random);
-    const y = randomRange(0.5, 4, random);
-    
-    // Skip if too close to roads
-    if (Math.abs(x) < 10 || Math.abs(z) < 10) continue;
-    
-    const color = baseColors[randomIdx(baseColors.length, random)];
-    colors.push(color);
-    
+    const y = (i - roadCount / 2) * roadSegment;
     const mesh = new THREE.Mesh(
-      new THREE.BoxGeometry(
-        randomRange(4, 12, random),
-        y + randomRange(2, 8, random),
-        randomRange(4, 12, random)
-      ),
-      new THREE.MeshStandardMaterial({
-        color,
-        roughness: 0.7,
-        metalness: 0.1,
-      })
+      new THREE.BoxGeometry(mainRoadWidth, 0.5, roadSegment),
+      roadMat
     );
-    mesh.position.set(x, y / 2 + 0.25, z);
-    mesh.castShadow = true;
+    mesh.position.set(-size * 0.6, 0.25, y);
     mesh.receiveShadow = true;
     world.buildings.push(mesh);
   }
   
-  // Generate trees
-  for (let i = 0; i < 300; i++) {
-    if (random() > CONFIG.TREE_DENSITY) continue;
-    const x = randomRange(-150, 150, random);
-    const z = randomRange(-150, 150, random);
-    
-    // Skip near roads
-    if (Math.abs(x) < 8 || Math.abs(z) < 8) continue;
-    
-    const tree = new THREE.Mesh(
-      new THREE.CylinderGeometry(1.5, 2, 6, 8),
-      new THREE.MeshStandardMaterial({
-        color: 0x1a5276,
-        roughness: 0.9,
-      })
+  // Vertical main roads
+  for (let i = 0; i < roadCount; i++) {
+    const z = (i - roadCount / 2) * roadSegment;
+    const mesh = new THREE.Mesh(
+      new THREE.BoxGeometry(roadSegment, 0.5, mainRoadWidth),
+      roadMat
     );
-    tree.position.set(x, 3, z);
-    tree.castShadow = true;
-    world.trees.push(tree);
-    
-    // Add some decorations
-    for (let j = 0; j < 2; j++) {
-      const bush = new THREE.Mesh(
-        new THREE.SphereGeometry(randomRange(0.8, 1.2, random), 6, 6),
-        new THREE.MeshStandardMaterial({
-          color: 0x1a5276,
-          roughness: 0.9,
-        })
-      );
-      bush.position.set(
-        x + randomRange(-2, 2, random),
-        2.5,
-        z + randomRange(-2, 2, random)
-      );
-      bush.castShadow = true;
-      world.trees.push(bush);
-    }
+    mesh.position.set(z, 0.25, -size * 0.6);
+    mesh.receiveShadow = true;
+    world.buildings.push(mesh);
   }
   
-  return world;
+  // Sub roads
+  const subRoadMat = new THREE.MeshStandardMaterial({
+    color: 0x555555, roughness: 0.9, metalness: 0.1,
+  });
+  for (let i = 0; i < roadCount; i++) {
+    const y = (i - roadCount / 2) * roadSegment;
+    const mesh = new THREE.Mesh(
+      new THREE.BoxGeometry(subRoadWidth, 0.5, roadSegment),
+      subRoadMat
+    );
+    mesh.position.set(-size * 0.6, 0.25, y);
+    mesh.receiveShadow = true;
+    world.buildings.push(mesh);
+  }
+  
+  for (let i = 0; i < roadCount; i++) {
+    const z = (i - roadCount / 2) * roadSegment;
+    const mesh = new THREE.Mesh(
+      new THREE.BoxGeometry(roadSegment, 0.5, subRoadWidth),
+      subRoadMat
+    );
+    mesh.position.set(z, 0.25, -size * 0.6);
+    mesh.receiveShadow = true;
+    world.buildings.push(mesh);
+  }
+  
+  // Generate buildings (diverse heights)
+  const colorSet = [0x2d1b1b, 0x1a1a2e, 0x16213e, 0x3d5a80, 0x1a1a1a, 0x5a3a2d, 0x2c3e50, 0x1f1f1f];
+  const noise = (x, z) => {
+    const n = Math.sin(x * 0.05) * Math.cos(z * 0.07) * 100;
+    return n;
+  };
+  
+  const buildingPositions = [];
+  for (let i = 0; i < 300; i++) {
+    const x = (Math.random() - 0.5) * size * 1.2;
+    const z = (Math.random() - 0.5) * size * 1.2;
+    
+    // Skip road areas
+    if (Math.abs(x) < 15 || Math.abs(z) < 15) continue;
+    
+    // Skip near edges
+    if (Math.abs(x) > size * 0.5 || Math.abs(z) > size * 0.5) continue;
+    
+    const height = Math.floor(Math.abs(noise(x, z)) % 20) + 3;
+    const color = colorSet[Math.floor(Math.random() * colorSet.length)];
+    
+    const geo = new THREE.BoxGeometry(
+      Math.random() * 8 + 4,
+      height + Math.random() * 6,
+      Math.random() * 8 + 4
+    );
+    const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.7, metalness: 0.1 });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(x, height / 2, z);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    world.buildings.push(mesh);
+    buildingPositions.push({ x, z, y: height });
+  }
+  
+  // Generate trees
+  for (let i = 0; i < 200; i++) {
+    const x = (Math.random() - 0.5) * size * 1.1;
+    const z = (Math.random() - 0.5) * size * 1.1;
+    if (Math.abs(x) < 10 || Math.abs(z) < 10) continue;
+    
+    const trunk = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.5, 0.8, 4, 6),
+      new THREE.MeshStandardMaterial({ color: 0x5d4037, roughness: 0.9 })
+    );
+    trunk.position.set(x, 2, z);
+    trunk.castShadow = true;
+    world.trees.push(trunk);
+    
+    const foliage = new THREE.Mesh(
+      new THREE.SphereGeometry(Math.random() * 3 + 2, 8, 6),
+      new THREE.MeshStandardMaterial({ color: 0x1a5276, roughness: 0.8 })
+    );
+    foliage.position.set(x, 6, z);
+    foliage.castShadow = true;
+    world.trees.push(foliage);
+  }
+  
+  // Traffic (simple box cars)
+  const trafficMat = new THREE.MeshStandardMaterial({ color: 0xd32f2f, roughness: 0.4, metalness: 0.6 });
+  for (let i = 0; i < 30; i++) {
+    const car = new THREE.Mesh(
+      new THREE.BoxGeometry(4, 1.8, 8),
+      trafficMat
+    );
+    car.position.set(
+      (Math.random() - 0.5) * 60,
+      0.9,
+      (Math.random() - 0.5) * 40
+    );
+    // Tires
+    for (let side = -1; side <= 1; side += 2) {
+      for (let pos = -3.5; pos <= 3.5; pos += 7) {
+        const tire = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.3, 0.3, 0.5, 8),
+          new THREE.MeshStandardMaterial({ color: 0x111111 })
+        );
+        tire.position.set(pos, 0.25, side * 4);
+        car.add(tire);
+      }
+    }
+    car.castShadow = true;
+    world.traffic.push(car);
+  }
+  
+  // Pedestrians
+  for (let i = 0; i < 50; i++) {
+    const p = new THREE.Mesh(
+      new THREE.BoxGeometry(0.8, 1.5, 0.4),
+      new THREE.MeshStandardMaterial({ color: 0x2d1b1b, roughness: 0.8 })
+    );
+    p.position.set(
+      (Math.random() - 0.5) * 40,
+      1.6,
+      (Math.random() - 0.5) * 40
+    );
+    world.pedestrians.push(p);
+  }
 }
 
-// Random range
-function randomRange(min, max, random) {
-  return min + random() * (max - min);
-}
-
-// Random index
-function randomIdx(max, random) {
-  return Math.floor(random() * max);
-}
-
-// Get car colors
-export function getCarColors() {
-  return [0xe74c3c, 0x3498db, 0xf1c40f, 0x9b59b6, 0x1abc9c, 0xe67e22, 0x2c3e50, 0x1a1a1a];
-}
-
-// Initialize the world
+// Initialize world
 export function init() {
-  // This will be called by the game
+  createCity();
+  player.money = 500;
 }
