@@ -1,61 +1,52 @@
-// Every tuning number and colour in one place. The playfield is a fixed 1280x720 logical area;
-// the renderer scales it to the window, so no rule below depends on the screen size.
-
-export const FIELD = { width: 1280, height: 720, groundY: 664 };
-
-/** The simulation's fixed step, in seconds: 60 updates a second whatever the display's rate. */
-export const STEP = 1 / 60;
-
-export const PLAYER = {
-  width: 72,
-  height: 24,
-  speed: 560,
-  invulnerable: 1.5,
+// Game configuration
+export const CONFIG = {
+  // World dimensions
+  WORLD_SIZE: 800,
+  CITY_SIZE: 200,
+  ROAD_WIDTH: 8,
+  BUILDING_HEIGHT: 20,
+  TREE_DENSITY: 0.15,
+  
+  // Player
+  PLAYER_SPEED: 5,
+  CAR_SPEED: 8,
+  BOOST_MULTIPLIER: 1.5,
+  MAX_HEALTH: 100,
+  
+  // Traffic
+  TRAFFIC_DENSITY: 0.3,
+  PEDESTRIAN_DENSITY: 0.2,
+  
+  // Car theft
+  THEFT_RANGE: 40,
+  THEFT_CARS_TO_FIND: 10,
+  
+  // Wanted stage
+  WANTED_STAGE_THRESHOLD: 5,
+  WANTED_SHOT_PER_STAGE: 2,
+  
+  // Camera
+  CAMERA_OFFSET: 10,
+  
+  // Game states
+  STATE_TITLE: 'title',
+  STATE_PLAY: 'play',
+  STATE_PAUSED: 'paused',
+  STATE_GAME_OVER: 'gameover',
+  
+  // Keys
+  KEY_W: 'KeyW',
+  KEY_A: 'KeyA',
+  KEY_S: 'KeyS',
+  KEY_D: 'KeyD',
+  KEY_LEFT: 'ArrowLeft',
+  KEY_UP: 'ArrowUp',
+  KEY_DOWN: 'ArrowDown',
+  KEY_RIGHT: 'ArrowRight',
+  KEY_SPACE: 'Space',
+  KEY_SHIFT: 'ShiftLeft',
+  KEY_E: 'KeyE',
+  KEY_C: 'KeyC',
+  KEY_R: 'KeyR',
+  KEY_F5: 'KeyF5',
 };
-
-export const LIVES = 3;
-
-export const BLOCK = {
-  minWidth: 40,
-  maxWidth: 110,
-  height: 36,
-  speed: 240,
-  speedPerLevel: 30,
-  speedJitter: 90,
-  interval: 0.55,
-  intervalScale: 0.88,
-  minInterval: 0.14,
-  dodgePoints: 1,
-};
-
-export const COIN = {
-  size: 24,
-  speed: 190,
-  speedPerLevel: 14,
-  interval: 1.4,
-  intervalJitter: 0.8,
-  points: 10,
-};
-
-/** Seconds of play per level, and the last level: speeds and spawn rates stop growing there. */
-export const LEVEL = { seconds: 12, max: 12 };
-
-/** How many falling things can exist at once; the pool is allocated once, at boot. */
-export const POOL_SIZE = 64;
-
-export const PALETTE = {
-  backdrop: '#11141b',
-  sky: '#1b1f2a',
-  ground: '#2a3040',
-  player: '#4fc3f7',
-  block: '#e5534b',
-  coin: '#f2c94c',
-  panel: '#252b38',
-  text: '#eef1f5',
-  muted: '#8b93a3',
-};
-
-export const FONT = 'system-ui, -apple-system, "Segoe UI", sans-serif';
-
-/** Where the best score is kept between visits (this browser only). */
-export const BEST_KEY = 'block-dodger.best';

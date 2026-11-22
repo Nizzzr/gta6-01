@@ -3,17 +3,69 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Block Dodger</title>
+<title>GTA 6 Open World</title>
 <style>
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #11141b; }
-  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
-  /* Read aloud, never shown: the status line screen readers announce. */
-  #status { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0a0a0a; color: #fff; font-family: Arial, sans-serif; }
+  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  #hud { position: fixed; inset: 0; pointer-events: none; color: #fff; font-size: 14px; }
+  #minimap { position: fixed; bottom: 20px; left: 20px; width: 180px; height: 180px; border: 2px solid #222; border-radius: 4px; overflow: hidden; background: #000; }
+  #minimap canvas { width: 100%; height: 100%; }
+  #hud-top { position: absolute; top: 10px; left: 10px; right: 10px; display: flex; justify-content: space-between; align-items: flex-start; }
+  #player-info { background: rgba(0,0,0,0.7); padding: 8px 12px; border-radius: 4px; min-width: 140px; }
+  #car-info { background: rgba(0,0,0,0.7); padding: 8px 12px; border-radius: 4px; min-width: 140px; }
+  #wanted-level { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; background: rgba(0,0,0,0.85); padding: 20px; border-radius: 8px; display: none; }
+  #wanted-level .icon { font-size: 48px; margin-bottom: 8px; }
+  #wanted-level h2 { margin: 0 0 8px; font-size: 24px; }
+  #wanted-level .level { font-size: 48px; font-weight: bold; }
+  #wanted-level .desc { font-size: 14px; opacity: 0.8; }
+  #mission { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; background: rgba(0,0,0,0.8); padding: 20px; border-radius: 8px; display: none; }
+  #mission h2 { margin: 0 0 8px; font-size: 20px; }
+  #mission .mini { font-size: 12px; opacity: 0.8; }
+  #message { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; background: rgba(0,0,0,0.7); padding: 16px 24px; border-radius: 8px; display: none; }
+  #message.hidden { display: none; }
+  #message strong { display: block; margin-bottom: 4px; }
+  #controls { position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; justify-content: center; font-size: 12px; background: rgba(0,0,0,0.7); padding: 8px 16px; border-radius: 8px; }
+  #save-notice { position: absolute; bottom: 80px; left: 50%; transform: translateX(-50%); font-size: 12px; opacity: 0.7; }
 </style>
 </head>
 <body>
-<canvas id="game" aria-label="Block Dodger: move the paddle left and right to dodge falling blocks and catch coins"></canvas>
-<p id="status" role="status" aria-live="polite"></p>
+<canvas id="game"></canvas>
+
+<div id="hud">
+  <div id="hud-top">
+    <div id="player-info">
+      <div id="player-name">Player</div>
+      <div id="player-vel">Speed: 0 km/h</div>
+      <div id="player-money">💰 0</div>
+    </div>
+    <div id="car-info">
+      <div>🚗 <span id="car-name">None</span></div>
+      <div>🔧 <span id="car-repair">Repair: 0%</span></div>
+      <div>⭐ <span id="car-points">0</span></div>
+    </div>
+  </div>
+  <div id="minimap"><canvas id="minimap-canvas"></canvas></div>
+  <div id="wanted-level">
+    <div class="icon" id="wanted-icon">👀</div>
+    <h2 id="wanted-title">Wanted Level</h2>
+    <div class="level" id="wanted-level-val">0</div>
+    <div class="desc" id="wanted-desc">Try to stay under the radar</div>
+  </div>
+  <div id="mission">
+    <h2 id="mission-title">Mission</h2>
+    <div id="mission-detail"></div>
+    <div class="mini" id="mission-status">Status: pending</div>
+  </div>
+  <div id="message">
+    <strong id="message-title">Info</strong>
+    <div id="message-body"></div>
+  </div>
+  <div id="controls">
+    ⚙️ W/A/S/D walk · ←↑↓→ drive · Space handbrake · Shift boost · E steal car · C monster truck · R rev
+  </div>
+  <div id="save-notice">💾 Save: F5</div>
+</div>
+
 <script type="module" src="./src/main.js"></script>
 </body>
 </html>

@@ -1,141 +1,225 @@
-// Drawing only: the world's state and the current screen in, pixels out. The 1280x720 playfield
-// is scaled to fit the window and centred, the margin filled with the backdrop colour. Flat
-// rectangles and circles, canvas text for the HUD and the panels. Text that holds a number is
-// rebuilt only when the number changes, so a frame allocates nothing.
-import { FIELD, FONT, LIVES, PALETTE } from './config.js';
-import { KIND_COIN } from './world.js';
+import * as THREE from '../../vendor/three.min.js';
 
-export const SCREEN_TITLE = 'title';
-export const SCREEN_PLAY = 'play';
-export const SCREEN_PAUSED = 'paused';
-export const SCREEN_OVER = 'over';
+import { CONFIG } from './config.js';
+import { world } from './world.js';
+import { player, camera } from './player.js';
 
-/** The panel's width; its height grows with its lines: room for the title, the lines and the prompt. */
-const PANEL = { width: 600, top: 134, line: 34, bottom: 70 };
-const LIFE_SIZE = 20;
-const LIFE_GAP = 8;
-
-function cachedLabel(prefix) {
-  let value = -1;
-  let text = '';
-  return function label(next) {
-    if (next !== value) {
-      value = next;
-      text = prefix + next;
-    }
-    return text;
-  };
-}
-
-export function createRenderer(canvas) {
-  const context = canvas.getContext('2d');
-  const view = { scale: 1, x: 0, y: 0 };
-  const scoreLabel = cachedLabel('Score ');
-  const levelLabel = cachedLabel('Level ');
-  const finalLabel = cachedLabel('Score ');
-  const bestLabel = cachedLabel('Best ');
-
-  function resize() {
-    const ratio = window.devicePixelRatio || 1;
-    const width = Math.round(window.innerWidth * ratio);
-    const height = Math.round(window.innerHeight * ratio);
-    canvas.width = width;
-    canvas.height = height;
-    view.scale = Math.min(width / FIELD.width, height / FIELD.height);
-    view.x = (width - FIELD.width * view.scale) / 2;
-    view.y = (height - FIELD.height * view.scale) / 2;
+export const renderer = {
+  canvas: document.getElementById('game'),
+  renderer: null,
+  scene: null,
+  camera: null,
+  
+  init() {
+    this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true });
+    this.renderer.setSize(window.innerWidth, window.innerHeight);
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.2;
+    
+    this.scene = new THREE.Scene();
+    
+    // Ambient light
+    const ambient = new THREE.AmbientLight(0x404040, 0.5);
+    this.scene.add(ambient);
+    
+    // Directional light (sun)
+    const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+    sun.position.set(100, 50, 100);
+    sun.castShadow = true;
+    sun.shadow.mapSize.width = 1024;
+    sun.shadow.mapSize.height = 1024;
+    this.scene.add(sun);
+    
+    // Create ground
+    const groundGeo = new THREE.PlaneGeometry(CONFIG.WORLD_SIZE, CONFIG.WORLD_SIZE);
+    groundGeo.rotateX(-Math.PI / 2);
+    const groundMat = new THREE.MeshStandardMaterial({
+      color: 0x1a1a2e,
+      roughness: 0.8,
+      metalness: 0.2,
+    });
+    const groundMesh = new THREE.Mesh(groundGeo, groundMat);
+    groundMesh.receiveShadow = true;
+    this.scene.add(groundMesh);
+    
+    // Add a grid helper for debugging
+    const grid = new THREE.GridHelper(CONFIG.WORLD_SIZE, 20, 0x444444, 0x333333);
+    grid.position.y = 0.01;
+    this.scene.add(grid);
+    
+    // Create a skybox
+    this.createSkybox();
+  },
+  
+  createSkybox() {
+    // Simple sky color
+    const skyGeo = new THREE.SphereGeometry(1000, 32, 16);
+    const skyMat = new THREE.ShaderMaterial({
+      side: THREE.BackSide,
+      uniforms: {
+        topColor: { value: new THREE.Color(0x0a0a1a) },
+        bottomColor: { value: new THREE.Color(0x1a1a2e) },
+        offset: { value: 20 },
+        exponent: { value: 0.6 },
+      },
+      fragmentShader: `
+        varying vec3 vWorldPosition;
+        uniform vec3 topColor;
+        uniform vec3 bottomColor;
+        uniform float offset;
+        uniform float exponent;
+        void main() {
+          vec3 worldPosition = vWorldPosition;
+          float h = normalize(worldPosition + offset).y;
+          float t = max(pow(max(h, 0.0), exponent), 0.0);
+          gl_FragColor = vec4(mix(bottomColor, topColor, t), 1.0);
+        }
+      `,
+      vertexShader: `
+        varying vec3 vWorldPosition;
+        void main() {
+          vec4 worldPos = modelMatrix * vec4(position, 1.0);
+          vWorldPosition = worldPos.xyz;
+          gl_Position = projectionMatrix * viewMatrix * worldPos;
+        }
+      `,
+    });
+    const sky = new THREE.Mesh(skyGeo, skyMat);
+    this.scene.add(sky);
+  },
+  
+  update(dt) {
+    this.renderer.render(this.scene, camera.position);
+  },
+  
+  resize() {
+    this.renderer.setSize(window.innerWidth, window.innerHeight);
   }
+};
 
-  const fonts = new Map();
-  function text(value, x, y, size, color, align) {
-    if (!fonts.has(size)) fonts.set(size, `${size}px ${FONT}`);
-    context.font = fonts.get(size);
-    context.fillStyle = color;
-    context.textAlign = align;
-    context.fillText(value, x, y);
-  }
-
-  function drawField(state) {
-    context.fillStyle = PALETTE.sky;
-    context.fillRect(0, 0, FIELD.width, FIELD.height);
-    context.fillStyle = PALETTE.ground;
-    context.fillRect(0, FIELD.groundY, FIELD.width, FIELD.height - FIELD.groundY);
-
-    const items = state.items;
-    for (let index = 0; index < items.length; index += 1) {
-      const item = items[index];
-      if (!item.active) continue;
-      if (item.kind === KIND_COIN) {
-        context.fillStyle = PALETTE.coin;
-        context.beginPath();
-        context.arc(item.x + item.width / 2, item.y + item.height / 2, item.width / 2, 0, Math.PI * 2);
-        context.fill();
-      } else {
-        context.fillStyle = PALETTE.block;
-        context.fillRect(item.x, item.y, item.width, item.height);
+// Minimap
+export const minimap = {
+  canvas: document.getElementById('minimap-canvas'),
+  ctx: null,
+  size: 180,
+  
+  init() {
+    this.ctx = this.canvas.getContext('2d');
+    this.canvas.width = this.size;
+    this.canvas.height = this.size;
+    this.draw();
+  },
+  
+  draw() {
+    const ctx = this.ctx;
+    const c = ctx;
+    c.clearRect(0, 0, this.size, this.size);
+    
+    // Background
+    c.fillStyle = 'rgba(0,0,0,0.7)';
+    c.fillRect(0, 0, this.size, this.size);
+    
+    // Map bounds
+    const half = CONFIG.WORLD_SIZE / 2;
+    const scale = this.size / (CONFIG.WORLD_SIZE + 40);
+    
+    // Draw roads
+    c.strokeStyle = '#444';
+    c.lineWidth = 2;
+    for (let i = 0; i < 15; i++) {
+      for (let j = 0; j < 15; j++) {
+        const x = (j - 7.5) * 30 * scale;
+        const z = (i - 7.5) * 30 * scale;
+        c.strokeRect(x, z, CONFIG.ROAD_WIDTH * scale * 3, 30 * scale * 3);
       }
     }
-
-    const player = state.player;
-    // Blink while invulnerable after a hit: hidden on every other tenth of a second.
-    if (player.invulnerable === 0 || Math.floor(player.invulnerable * 10) % 2 === 1) {
-      context.fillStyle = PALETTE.player;
-      context.fillRect(player.x, player.y, player.width, player.height);
-    }
+    
+    // Draw buildings (simple rectangles)
+    c.fillStyle = '#3d5a80';
+    world.buildings.forEach(b => {
+      if (b.geometry && b.geometry.parameters) {
+        const x = b.position.x * scale;
+        const z = b.position.z * scale;
+        const w = b.geometry.parameters.width || b.geometry.parameters[0] || 6;
+        const d = b.geometry.parameters.height || b.geometry.parameters[2] || 6;
+        c.fillRect(x - w * scale / 2, z - d * scale / 2, w * scale, d * scale);
+      }
+    });
+    
+    // Draw player
+    const px = player.position.x * scale + this.size / 2;
+    const pz = player.position.z * scale + this.size / 2;
+    c.fillStyle = '#e74c3c';
+    c.beginPath();
+    c.arc(px, pz, 5, 0, Math.PI * 2);
+    c.fill();
+    
+    // Draw cars
+    c.fillStyle = '#9b59b6';
+    world.cars.forEach(car => {
+      const cx = car.position.x * scale + this.size / 2;
+      const cz = car.position.z * scale + this.size / 2;
+      c.fillRect(cx - 3, cz - 3, 6, 6);
+    });
+    
+    // Draw wanted level
+    c.font = '10px Arial';
+    c.fillStyle = '#fff';
+    c.fillText(`W: ${world.wantedLevel}`, 10, 15);
   }
+};
 
-  function drawHud(state) {
-    context.textBaseline = 'top';
-    text(scoreLabel(state.score), 24, 20, 28, PALETTE.text, 'left');
-    text(levelLabel(state.level), FIELD.width / 2, 20, 28, PALETTE.text, 'center');
-    const firstLife = FIELD.width - 24 - LIVES * (LIFE_SIZE + LIFE_GAP) + LIFE_GAP;
-    text('Lives', firstLife - 12, 20, 28, PALETTE.text, 'right');
-    for (let life = 0; life < LIVES; life += 1) {
-      context.fillStyle = life < state.lives ? PALETTE.player : PALETTE.ground;
-      context.fillRect(firstLife + life * (LIFE_SIZE + LIFE_GAP), 24, LIFE_SIZE, LIFE_SIZE);
-    }
+// Update the HUD
+export function updateHud() {
+  // WANTED LEVEL
+  const wantedEl = document.getElementById('wanted-level');
+  const wantedIcon = document.getElementById('wanted-icon');
+  const wantedTitle = document.getElementById('wanted-title');
+  const wantedLevelVal = document.getElementById('wanted-level-val');
+  const wantedDesc = document.getElementById('wanted-desc');
+  
+  world.wantedLevel = Math.round(world.wantedLevel);
+  wantedLevelVal.textContent = world.wantedLevel;
+  
+  if (world.wantedLevel === 0) {
+    wantedEl.style.display = 'none';
+  } else if (world.wantedLevel < 5) {
+    wantedEl.style.display = 'block';
+    wantedIcon.textContent = '👀';
+    wantedTitle.textContent = 'Wanted Level';
+    wantedDesc.textContent = 'You are being watched';
+  } else if (world.wantedLevel < 10) {
+    wantedEl.style.display = 'block';
+    wantedIcon.textContent = '🚓';
+    wantedTitle.textContent = 'Police Following';
+    wantedDesc.textContent = 'Police are after you!';
+  } else if (world.wantedLevel < 15) {
+    wantedEl.style.display = 'block';
+    wantedIcon.textContent = '🚨';
+    wantedTitle.textContent = 'WANTED';
+    wantedDesc.textContent = 'Police will catch you!';
+  } else {
+    wantedEl.style.display = 'block';
+    wantedIcon.textContent = '🔪';
+    wantedTitle.textContent = 'WANTED NIGHTMARE';
+    wantedDesc.textContent = 'You are a criminal!';
   }
+  
+  // MINIMAP
+  minimap.draw();
+}
 
-  function drawPanel(title, lines, prompt) {
-    const height = PANEL.top + lines.length * PANEL.line + PANEL.bottom;
-    const x = (FIELD.width - PANEL.width) / 2;
-    const y = (FIELD.height - height) / 2;
-    context.fillStyle = PALETTE.panel;
-    context.fillRect(x, y, PANEL.width, height);
-    context.textBaseline = 'alphabetic';
-    text(title, FIELD.width / 2, y + 78, 48, PALETTE.text, 'center');
-    for (let index = 0; index < lines.length; index += 1) {
-      text(lines[index], FIELD.width / 2, y + PANEL.top + index * PANEL.line, 22, PALETTE.muted, 'center');
-    }
-    text(prompt, FIELD.width / 2, y + height - 40, 24, PALETTE.coin, 'center');
-  }
+// Show message
+export function showMessage(title, body) {
+  const el = document.getElementById('message');
+  el.style.display = 'block';
+  el.querySelector('strong').textContent = title;
+  el.querySelector('div').textContent = body;
+}
 
-  const TITLE_LINES = ['Dodge the red blocks. Catch the gold coins.', 'Move with ← → or A D.  Pause with P.', ''];
-  const PAUSED_LINES = ['The blocks will wait for you.'];
-  const OVER_LINES = ['', ''];
-
-  /** Paint one frame: the field, then the HUD or a panel for the screen the game is on. */
-  function draw(state, screen, best) {
-    context.setTransform(1, 0, 0, 1, 0, 0);
-    context.fillStyle = PALETTE.backdrop;
-    context.fillRect(0, 0, canvas.width, canvas.height);
-    context.setTransform(view.scale, 0, 0, view.scale, view.x, view.y);
-    drawField(state);
-    if (screen === SCREEN_TITLE) {
-      TITLE_LINES[2] = bestLabel(best);
-      drawPanel('Block Dodger', TITLE_LINES, 'Press Space or click to start');
-      return;
-    }
-    drawHud(state);
-    if (screen === SCREEN_PAUSED) drawPanel('Paused', PAUSED_LINES, 'Press P to resume');
-    else if (screen === SCREEN_OVER) {
-      OVER_LINES[0] = finalLabel(state.score);
-      OVER_LINES[1] = bestLabel(best);
-      drawPanel('Game over', OVER_LINES, 'Press Space or click to play again');
-    }
-  }
-
-  resize();
-  window.addEventListener('resize', resize);
-  return { draw };
+// Hide message
+export function hideMessage() {
+  document.getElementById('message').style.display = 'none';
 }
